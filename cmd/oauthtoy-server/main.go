@@ -104,13 +104,23 @@ func handlerRoot(w http.ResponseWriter, r *http.Request) {
 
 var sampleSecretKey = []byte("SecretYouShouldHide")
 
+func getParam(r *http.Request, key string) string {
+	v := r.Form[key]
+	if v == nil {
+		return ""
+	}
+	return v[0]
+}
+
 func handlerToken(w http.ResponseWriter, r *http.Request) {
 
-	params := getParameters(r, "grant_type", "client_id", "client_secret")
+	if err := r.ParseForm(); err != nil {
+		log.Printf("handlerToken: ParseForm: err: %v", err)
+	}
 
-	grantType := params["grant_type"]
-	clientID := params["client_id"]
-	clientSecret := params["client_secret"]
+	grantType := getParam(r, "grant_type")
+	clientID := getParam(r, "client_id")
+	clientSecret := getParam(r, "client_secret")
 
 	log.Printf("method=%s grant_type=%s client_id=%s client_secret=%s",
 		r.Method, grantType, clientID, clientSecret)
@@ -133,23 +143,6 @@ func handlerToken(w http.ResponseWriter, r *http.Request) {
 		RefreshToken string `json:"refresh_token"`
 		ExpiresIn    int    `json:"expires_in"`
 	}
-
-	/*
-		const expire = 10
-
-		accessToken := jwt.New(jwt.SigningMethodHS256)
-		claims := accessToken.Claims.(jwt.MapClaims)
-		claims["exp"] = time.Now().Add(expire * time.Second)
-		//claims["authorized"] = true
-		//claims["user"] = "username"
-		accessTokenStr, errSign := accessToken.SignedString(sampleSecretKey)
-		if errSign != nil {
-			log.Printf("%s %s %s - sign access token - 500 server error: %v",
-				r.RemoteAddr, r.Method, r.RequestURI, errSign)
-			response(w, r, http.StatusInternalServerError, "server error")
-			return
-		}
-	*/
 
 	const expire = 30
 
@@ -203,33 +196,6 @@ func newToken(clientID string, exp int) (string, error) {
 		return "", errSign
 	}
 	return str, nil
-}
-
-func getParameters(r *http.Request, keys ...string) map[string]string {
-
-	var formParsed bool
-
-	table := map[string]string{}
-
-	for _, k := range keys {
-		if value, found := r.URL.Query()[k]; found {
-			v := value[0]
-			table[k] = v
-			continue
-		}
-
-		if !formParsed {
-			log.Printf("parsing form")
-			if err := r.ParseForm(); err != nil {
-				log.Printf("getParameters: err: %v", err)
-			}
-			formParsed = true
-		}
-
-		table[k] = r.FormValue(k)
-	}
-
-	return table
 }
 
 func handlerEcho(w http.ResponseWriter, r *http.Request) {
