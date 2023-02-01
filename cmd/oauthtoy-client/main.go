@@ -55,7 +55,7 @@ func main() {
 
 	httpClient := http.DefaultClient
 
-	httpClient.Transport = transport()
+	httpClient.Transport = transport(config.TokenURL)
 
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, httpClient)
 
@@ -70,32 +70,42 @@ func main() {
 	}
 }
 
-func transport() http.RoundTripper {
+func transport(tokenURL string) http.RoundTripper {
 	t := &myTransport{
-		t: http.DefaultTransport,
+		tokenURL: tokenURL,
+		t:        http.DefaultTransport,
 	}
 	return t
 }
 
 type myTransport struct {
-	t http.RoundTripper
+	tokenURL string
+	t        http.RoundTripper
 }
 
 func (t *myTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	resp, err := t.t.RoundTrip(r)
-	if err != nil {
-		log.Printf("myTransport.RoundTrip: token retrieval intercepted: error: %v", err)
-		return resp, err
+	if r.URL.String() != t.tokenURL {
+		log.Printf("myTransport.RoundTrip: wont intercept: %s", r.URL)
+		return t.t.RoundTrip(r)
+	}
+
+	resp, errTrip := t.t.RoundTrip(r)
+	if errTrip != nil {
+		log.Printf("myTransport.RoundTrip: token retrieval intercepted: url=%s error: %v",
+			r.URL, errTrip)
+		return resp, errTrip
 	}
 	body, errRead := io.ReadAll(resp.Body)
 	if errRead != nil {
-		log.Printf("myTransport.RoundTrip: token retrieval intercepted: read: %v", errRead)
-		return resp, err
+		log.Printf("myTransport.RoundTrip: token retrieval intercepted: url=%s read: %v",
+			r.URL, errRead)
+		return resp, errRead
 	}
 	resp.Body.Close()                               // close original body reader
 	resp.Body = io.NopCloser(bytes.NewBuffer(body)) // provide new body reader
-	log.Printf("myTransport.RoundTrip: token retrieval intercepted: body: %s", string(body))
-	return resp, err
+	log.Printf("myTransport.RoundTrip: token retrieval intercepted: url=%s body: %s",
+		r.URL, string(body))
+	return resp, nil
 }
 
 func request(client *http.Client) {
