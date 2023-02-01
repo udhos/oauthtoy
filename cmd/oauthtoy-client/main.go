@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -127,5 +128,21 @@ func request(client *http.Client) {
 		log.Fatalf("read: %v", errRead)
 	}
 
-	fmt.Printf("response: %s", string(body))
+	var result interface{}
+
+	errJSON := json.Unmarshal(body, &result)
+	if errJSON != nil {
+		log.Printf("json error: %v", errJSON)
+	}
+
+	log.Println("echo response:")
+	fmt.Println(toJSON(result))
+}
+
+func toJSON(v interface{}) string {
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		log.Printf("toJSON: %v", err)
+	}
+	return string(b)
 }

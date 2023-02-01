@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -220,14 +221,43 @@ func handlerEcho(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	buf, errJSON := json.Marshal(r.Header)
-	if errJSON != nil {
-		log.Printf("%s %s %s - json error - 500 server error", r.RemoteAddr, r.Method, r.RequestURI)
+	type reply struct {
+		RequestHeaders http.Header `json:"request_headers"`
+		RequestBody    string      `json:"request_body"`
+		RequestMethod  string      `json:"request_method"`
+		RequestURL     string      `json:"request_url"`
+		RequestHost    string      `json:"request_host"`
+	}
+
+	body, errRead := io.ReadAll(r.Body)
+	if errRead != nil {
+		log.Printf("%s %s %s - 500 server error - read error: %v",
+			r.RemoteAddr, r.Method, r.RequestURI, errRead)
 		response(w, r, http.StatusInternalServerError, "server error")
 		return
 	}
 
+	defer r.Body.Close()
+
+	message := reply{
+		RequestHeaders: r.Header,
+		RequestBody:    string(body),
+		RequestMethod:  r.Method,
+		RequestURL:     r.URL.String(),
+		RequestHost:    r.Host,
+	}
+
+	messageStr := toJSON(&message)
+
 	log.Printf("%s %s %s - 200 ok", r.RemoteAddr, r.Method, r.RequestURI)
 
-	httpJSON(w, string(buf), http.StatusOK)
+	httpJSON(w, messageStr, http.StatusOK)
+}
+
+func toJSON(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		log.Printf("toJSON: %v", err)
+	}
+	return string(b)
 }
